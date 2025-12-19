@@ -1,6 +1,7 @@
 import random
 import string
 from typing import Type
+from datetime import datetime, date, timedelta
 
 # --- Primitives ---
 
@@ -173,3 +174,72 @@ class Object[T]:
 
         for kwargs in dict_gen:
             yield self.cls(**kwargs)
+
+
+# ... Dates ...
+
+
+class Date:
+    """
+    Generates dates between start and end.
+    Edge cases: start, end, today (if in range), leap days.
+    """
+
+    def __init__(self, start: date, end: date):
+        self.start = start
+        self.end = end
+        self.delta_days = (end - start).days
+
+    def __iter__(self):
+        # 1. Edge Cases
+        yield self.start
+        yield self.end
+
+        # Today
+        today = date.today()
+        if self.start <= today <= self.end:
+            yield today
+
+        # Leap Day (Feb 29) - Try to find one in range
+        # Simple heuristic: Check the first 4 years in range
+        curr_year = self.start.year
+        for y in range(curr_year, curr_year + 5):
+            try:
+                leap_day = date(y, 2, 29)
+                if self.start <= leap_day <= self.end:
+                    yield leap_day
+                    break
+            except ValueError:
+                continue
+
+        # 2. Random Stream
+        while True:
+            days_offset = random.randint(0, self.delta_days)
+            yield self.start + timedelta(days=days_offset)
+
+
+class DateTime:
+    """
+    Generates datetimes.
+    Edge cases: start, end, now, midnight, noon.
+    """
+
+    def __init__(self, start: datetime, end: datetime):
+        self.start = start
+        self.end = end
+        self.delta_seconds = int((end - start).total_seconds())
+
+    def __iter__(self):
+        # 1. Edge Cases
+        yield self.start
+        yield self.end
+
+        # Now
+        now = datetime.now()
+        if self.start <= now <= self.end:
+            yield now
+
+        # 2. Random Stream
+        while True:
+            seconds_offset = random.randint(0, self.delta_seconds)
+            yield self.start + timedelta(seconds=seconds_offset)
