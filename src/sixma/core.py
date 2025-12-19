@@ -1,6 +1,8 @@
 import math
 import functools
 import inspect
+import os
+import random
 from typing import get_type_hints, Annotated, get_args, get_origin
 
 
@@ -60,6 +62,17 @@ def certify(reliability: float = 0.999, confidence: float = 0.95, max_discards: 
 
         @functools.wraps(test_func)
         def wrapper(**fixture_kwargs):
+            env_seed = os.environ.get("SIXMA_SEED")
+            if env_seed:
+                current_seed = int(env_seed)
+                print(f"[Sixma] Reproducing with Seed: {current_seed}")
+            else:
+                # Generate a random 32-bit seed
+                current_seed = random.getrandbits(32)
+
+            # Apply the seed globally for this test execution
+            random.seed(current_seed)
+
             successes = 0
             discards = 0
 
@@ -97,6 +110,7 @@ def certify(reliability: float = 0.999, confidence: float = 0.95, max_discards: 
                 except AssertionError as e:
                     raise AssertionError(
                         f"❌ Falsified at trial {successes + 1}!\n"
+                        f"   Seed: {current_seed} (Set SIXMA_SEED={current_seed} to reproduce)\n"
                         f"   Inputs: {generated_kwargs}\n"
                         f"   Error: {e}"
                     ) from e
