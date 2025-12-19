@@ -35,9 +35,7 @@ def test_dict_combinator(
     # Generates a dictionary with specific keys and value types
     config: Annotated[
         dict,
-        g.Dict(
-            host=g.String(max_len=10), port=g.Integer(8000, 9000), ssl=g.Bool()
-        ),
+        g.Dict(host=g.String(max_len=10), port=g.Integer(8000, 9000), ssl=g.Bool()),
     ],
 ):
     """Verifies that Dict generator produces the correct schema."""
@@ -80,9 +78,7 @@ def test_nested_combinators(
     # List[Dict[str, int]]
     matrix: Annotated[
         list[dict],
-        g.List(
-            g.Dict(x=g.Integer(0, 10), y=g.Integer(0, 10)), min_len=1, max_len=3
-        ),
+        g.List(g.Dict(x=g.Integer(0, 10), y=g.Integer(0, 10)), min_len=1, max_len=3),
     ],
 ):
     """Verifies that combinators can be nested arbitrarily."""

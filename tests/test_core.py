@@ -19,7 +19,7 @@ def test_happy_path_certification():
         assert a + b == b + a
 
     # Should run silent and return None
-    valid_property() # type: ignore
+    valid_property()  # type: ignore
 
 
 def test_falsification_detects_bug():
@@ -34,7 +34,7 @@ def test_falsification_detects_bug():
 
     # We expect the framework to raise an AssertionError
     with pytest.raises(AssertionError) as excinfo:
-        broken_property() # type: ignore
+        broken_property()  # type: ignore
 
     # Verify the error message contains helpful info
     error_msg = str(excinfo.value)
@@ -53,7 +53,7 @@ def test_precondition_logic_filtering():
         require(x % 2 == 0)
         assert x % 2 == 0
 
-    constrained_property() # type: ignore
+    constrained_property()  # type: ignore
 
 
 def test_exhaustion_error():
@@ -67,7 +67,7 @@ def test_exhaustion_error():
         require(x > 200)
 
     with pytest.raises(CertificationError) as excinfo:
-        impossible_property() # type: ignore
+        impossible_property()  # type: ignore
 
     assert "Discarded 51 inputs" in str(excinfo.value)
 
@@ -88,7 +88,7 @@ def test_generator_edge_cases_are_hit_first():
         captured_inputs.append(x)
         assert True
 
-    spy_test() # type: ignore
+    spy_test()  # type: ignore
 
     # Assert that critical edge cases were visited
     assert 0 in captured_inputs
@@ -103,7 +103,7 @@ def test_file_writing(
     # Sixma Param
     n: Int100,
     # Pytest Fixture (Standard argument, no generator annotation)
-    tmp_path
+    tmp_path,
 ):
     """
     Tests that we can write a generated number to a temporary file provided by pytest.

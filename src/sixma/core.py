@@ -5,18 +5,24 @@ import os
 import random
 from typing import get_type_hints, Annotated, get_args, get_origin
 
+
 # ... (PreconditionError, CertificationError, require remain unchanged) ...
 class PreconditionError(Exception):
     pass
 
+
 class CertificationError(Exception):
     pass
+
 
 def require(condition: bool):
     if not condition:
         raise PreconditionError()
 
-def certify(reliability: float = 0.999, confidence: float = 0.95, max_discards: int = 10000):
+
+def certify(
+    reliability: float = 0.999, confidence: float = 0.95, max_discards: int = 10000
+):
     if reliability >= 1.0 or reliability <= 0.0:
         raise ValueError("Reliability must be between 0.0 and 1.0 (exclusive).")
 
@@ -45,14 +51,14 @@ def certify(reliability: float = 0.999, confidence: float = 0.95, max_discards: 
                 if len(args) > 1:
                     candidate = args[1]
                     # Check if it's a class or an instance with __iter__
-                    if hasattr(candidate, '__iter__') or isinstance(candidate, type):
+                    if hasattr(candidate, "__iter__") or isinstance(candidate, type):
                         blueprint = candidate
 
             # Strategy B: Direct Generator Instance (Shortcut)
             # e.g. def test(x: gen.Integer(0, 10))
             # We check if the hint ITSELF is iterable (and not a class like 'str' or 'list')
-            elif hasattr(type_hint, '__iter__') and not isinstance(type_hint, type):
-                 blueprint = type_hint
+            elif hasattr(type_hint, "__iter__") and not isinstance(type_hint, type):
+                blueprint = type_hint
 
             # Register if valid
             if blueprint:
@@ -80,11 +86,15 @@ def certify(reliability: float = 0.999, confidence: float = 0.95, max_discards: 
                     try:
                         active_streams[name] = iter(bp())
                     except TypeError:
-                         raise TypeError(f"Generator class '{bp.__name__}' needs arguments. Instantiate it in the signature.")
+                        raise TypeError(
+                            f"Generator class '{bp.__name__}' needs arguments. Instantiate it in the signature."
+                        )
                 else:
                     active_streams[name] = iter(bp)
 
-            print(f"\n[Sixma] Target: {required_successes} successes (R={reliability}, C={confidence})")
+            print(
+                f"\n[Sixma] Target: {required_successes} successes (R={reliability}, C={confidence})"
+            )
 
             while successes < required_successes:
                 if discards > max_discards:
@@ -119,8 +129,7 @@ def certify(reliability: float = 0.999, confidence: float = 0.95, max_discards: 
 
         # Patch Signature
         new_params = [
-            p for p in sig.parameters.values()
-            if p.name not in sixma_param_names
+            p for p in sig.parameters.values() if p.name not in sixma_param_names
         ]
         wrapper.__signature__ = sig.replace(parameters=new_params)
 

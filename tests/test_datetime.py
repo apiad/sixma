@@ -35,7 +35,8 @@ def test_next_day_logic(d: DateRange):
 LogWindow = Annotated[
     datetime,
     g.DateTime(
-        datetime(2024, 1, 1, 0, 0, 0), datetime(2024, 1, 2, 0, 0, 0)  # One day window
+        datetime(2024, 1, 1, 0, 0, 0),
+        datetime(2024, 1, 2, 0, 0, 0),  # One day window
     ),
 ]
 
