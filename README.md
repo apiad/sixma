@@ -1,3 +1,6 @@
+Here is the completely updated `README.md`. I have restructured the **Quick Start** section to explicitly compare the three syntax styles, clearly labeling them as **Recommended (Production)**, **Strict (Annotated)**, and **Prototyping (Shortcut)**.
+
+```markdown
 # Sixma
 
 ![PyPI - Version](https://img.shields.io/pypi/v/sixma)
@@ -12,52 +15,77 @@
 
 Sixma is a testing framework that replaces manual test cases with **Generative Spaces** and **Statistical Certification**. Instead of checking if `f(2) == 4`, you define the invariant `f(x) == x^2` and Sixma proves it holds true with a specific **Reliability** and **Confidence Level**.
 
-It is built on the **Zero-Failure Reliability** model: calculating exactly how many random trials are required to certify that a system is bug-free up to a certain probability threshold.
-
+It uses the **Zero-Failure Reliability** model to dynamically calculate the required number of random trials ($N$) to certify your system is bug-free.
 ## 📦 Installation
 
 ```bash
 uv add sixma
 # or
 pip install sixma
+
 ```
 
-## 🚀 Quick Start
+## 🚀 Quick Start: The 3 Ways to Write Tests
 
-Write your tests as standard Python functions using the `sixma.generators` as type hints.
+Sixma is flexible. Choose the syntax that fits your project's strictness level.
+
+### 1. The Production Way (Recommended) ⭐
+
+Use standard Python type hints combined with **Default Values**.
+
+* **Pros:** 100% compatible with `mypy`, `pyright`, and IDE autocomplete.
+* **Cons:** Slightly more verbose.
 
 ```python
-from sixma import certify, require, generators as g
+from sixma import certify, generators as g
 
-# 1. Certify logic
 @certify(reliability=0.999, confidence=0.95)
-def test_drinking_age_logic(age: g.Integer(0, 120)):
-    """
-    Verifies legal drinking age logic.
-    Target: 0.1% failure rate with 95% confidence (~2993 trials).
-    """
-    # Preconditions (Rejection Sampling)
-    # If this is False, the input is discarded and regenerated.
-    require(age >= 18)
+def test_math(
+    # Mypy sees 'int'. Sixma sees the generator in the default value.
+    x: int = g.Integer(0, 100),
+    y: int = g.Integer(0, 100)
+):
+    assert x + y == y + x
 
-    # Execution
-    is_allowed = check_id(age)
-
-    # Postconditions (Falsification)
-    # If this fails ONCE, the certification fails immediately.
-    assert is_allowed is True
 ```
 
-Run it with standard `pytest`:
+### 2. The Prototyping Way (Shortcut) ⚡
 
-```bash
-$ pytest -s
+Use the generator instance directly as the type hint.
 
-[Sixma] Target: 2993 successes (R=0.999, C=0.95)
-[Sixma] Certified ✔️  (2993 passed, 41 discarded)
-PASSED
+* **Pros:** Fastest to write. Very clean to read.
+* **Cons:** Static type checkers (mypy) will complain that "Integer is not a type".
+
+```python
+@certify
+def test_math(
+    # Fast to write, but upsets strict type checkers
+    x: g.Integer(0, 100),
+    # or even as default value
+    y = g.Integer(0, 100),
+):
+    assert x + y == y + x
+
 ```
 
+### 3. The Strict Way (Annotated) 🧐
+
+Use Python's standard `typing.Annotated`.
+
+* **Pros:** The "Academic" standard for metadata. Mypy compliant.
+* **Cons:** Very verbose.
+
+```python
+from typing import Annotated
+
+@certify
+def test_math(
+    x: Annotated[int, g.Integer(0, 100)],
+    y: Annotated[int, g.Integer(0, 100)]
+):
+    assert x + y == y + x
+
+```
 ## 🧠 The Philosophy
 
 Standard property-based testing runs an arbitrary number of tests (e.g., 100). Sixma inverts this: **You tell the framework how confident you want to be.**
@@ -75,45 +103,30 @@ $$
 | 0.999       | 0.99       | 4,603           | Core Algorithms         |
 | 0.9999      | 0.999      | 69,075          | Critical Infrastructure |
 
-* **Reliability ():** The probability that the code will NOT fail on a random input.
-* **Confidence ():** The probability that our estimation of  is correct.
+* **Reliability:** The probability that the code will NOT fail on a random input.
+* **Confidence:** The probability that our estimation of  is correct.
 
 ## 🛠 Features
 
-### 1. Smart Generators
+### 1. Smart Generators (Edge Cases First)
 
-Sixma generators are **finite iterators** first, and **infinite streams** second. They always yield edge cases (0, -1, empty strings, boundaries) before switching to random sampling.
-
-```python
-# Will yield: 0, 10, 1, -1, 5, 8, ...
-def test_integers(x: g.Integer(0, 10)): ...
-
-# Will yield: "", "a", "   ", "xyz", ...
-def test_strings(s: g.String(max_len=3)): ...
-```
-
-### 2. Clean Syntax
-
-You don't need `typing.Annotated`. Just use the generator instance directly as the type hint.
+Sixma generators are **finite iterators** first. They always yield critical edge cases (0, -1, empty strings, boundaries, leap years) before switching to random sampling.
 
 ```python
-@certify
-def test_math(
-    x: g.Integer(0, 100),
-    y: g.Float(0.0, 1.0)
-):
-    assert x * y <= 100.0
+# Yields: 0, 10, 1, -1, 5, 8, ...
+x: int = g.Integer(0, 10)
+
 ```
 
-### 3. Dependent Variables (`g.Case`)
+### 2. Dependent Variables (`g.Case`)
 
-Often, test inputs depend on each other (e.g., `start < end` or `deadline > created_at`). Instead of using `require()`—which wastes CPU cycles discarding invalid random samples—use `g.Case` to define a **Generative Causal Chain**.
+Define inputs that depend on each other without wasteful rejection sampling.
 
 ```python
 @certify
 def test_slicing(
     # 'case' generates a namespace where fields depend on previous ones
-    case: g.Case(
+    case: SimpleNamespace = g.Case(
         # 1. Independent Variable
         size = g.Integer(1, 100),
 
@@ -124,56 +137,35 @@ def test_slicing(
         end = lambda start, size: g.Integer(start + 1, size)
     )
 ):
-    # Inputs are guaranteed to be valid! No require() needed.
+    # Inputs are guaranteed to be valid!
+    # Mypy Tip: Use SimpleNamespace or a custom class for type hints.
     data = list(range(case.size))
     chunk = data[case.start : case.end]
 
     assert len(chunk) == case.end - case.start
+
 ```
 
-### 4. Complex Data Structures
+### 3. Time Travel (Temporal Testing)
 
-Model complex domains easily with `List`, `Dict`, and `Object`.
-
-```python
-@dataclass
-class Packet:
-    id: int
-    payload: str
-
-# Generates fully populated class instances
-def test_network(
-    pkts: g.List(
-        g.Object(
-            Packet,
-            id=g.Integer(1000, 9999),
-            payload=g.String(max_len=255)
-        ),
-        min_len=1, max_len=5
-    )
-):
-    assert len(pkts) >= 1
-```
-
-### 5. Time Travel (Temporal Testing)
-
-Generate valid dates, times, and windows easily.
+Generate valid dates, times, and windows easily. Handles leap years automatically.
 
 ```python
-from datetime import date, timedelta
+from datetime import date
 
 # Define a Business Quarter
 Q1_2024 = g.Date(date(2024, 1, 1), date(2024, 3, 31))
 
 @certify
-def test_quarterly_report(day: Q1_2024):
+def test_quarterly_report(day: date = Q1_2024):
     assert day.year == 2024
     assert 1 <= day.month <= 3
+
 ```
 
-### 6. Reproducibility (Seeding)
+### 4. Reproducibility (Seeding)
 
-Statistical tests must be reproducible. If a test fails, Sixma prints the **Random Seed** used.
+Statistical tests must be reproducible. If a test fails, Sixma prints the **Random Seed** used in the logs.
 
 **Output on Failure:**
 
@@ -182,12 +174,25 @@ Statistical tests must be reproducible. If a test fails, Sixma prints the **Rand
    Seed: 84920174 (Set SIXMA_SEED=84920174 to reproduce)
    Inputs: {'x': -5}
    Error: assert -5 > 0
+
 ```
 
 **Reproduce it locally:**
 
 ```bash
 SIXMA_SEED=84920174 pytest tests/test_my_logic.py
+
+```
+
+### 5. Auto-Shrinking (Debuggability)
+
+When a test fails on a complex input (e.g., a list of 50 items), Sixma automatically re-runs the test with the **Simplest Case** (e.g., empty list) to see if the bug persists.
+
+```text
+❌ Falsified at trial 55!
+   Inputs: {'items': [23, 99, ... 48 more]}
+   📉 Minimal Counter-Example: {'items': []}
+
 ```
 ## 📚 API Reference
 
@@ -199,24 +204,17 @@ The main decorator.
 * `confidence`: Statistical significance level (0.0 - 1.0).
 * `max_discards`: Safety valve for infinite loops in `require()`.
 
-### `require(condition)`
-
-Used for **Preconditions**.
-
-* If `True`: Continues execution.
-* If `False`: Aborts the current trial, discards inputs, and samples again.
-
 ### Generators (`sixma.generators`)
+
+All generators are available as factory functions compatible with Mypy.
 
 * **Primitives:** `Integer`, `Float`, `Bool`, `String`
 * **Combinators:**
   * `List(gen, min_len, max_len)`
   * `Dict(key=gen, ...)`
   * `Object(Cls, field=gen, ...)`
-
 * **Logic:**
   * `Case(field=gen, dependent_field=lambda prev: gen)`
-
 * **Temporal:**
   * `Date(start, end)`
   * `DateTime(start, end)`

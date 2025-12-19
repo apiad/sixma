@@ -3,13 +3,22 @@ import string
 import inspect
 from types import SimpleNamespace
 from datetime import date, datetime, timedelta
-from typing import Type, Any, Callable, Optional
+from typing import (
+    Type,
+    Any,
+    Callable,
+    Optional,
+    TypeVar,
+    List as PyList,
+    Dict as PyDict,
+    cast,
+)
+
+T = TypeVar("T")
 
 
 # --- Helper: Smart Sampling ---
-def smart_sample(
-    edge_cases: list | set, random_fn: Callable[[], Any], rng: Any
-) -> Any:
+def smart_sample(edge_cases: list | set, random_fn: Callable[[], Any], rng: Any) -> Any:
     """10% chance to pick an edge case, otherwise random."""
     if edge_cases and rng.random() < 0.10:
         return rng.choice(list(edge_cases))
@@ -17,6 +26,8 @@ def smart_sample(
 
 
 class BaseGenerator:
+    """Base class for all Sixma generators."""
+
     def __init__(self, rng: Optional[random.Random] = None):
         self.rng = rng
 
@@ -24,14 +35,20 @@ class BaseGenerator:
     def _rng(self):
         return self.rng if self.rng is not None else random
 
-    def bind(self, rng: random.Random):
+    def bind(self, rng: random.Random) -> "BaseGenerator":
         raise NotImplementedError("Generators must implement bind(rng)")
 
+    def sample(self) -> Any:
+        raise NotImplementedError()
 
-# --- Primitives ---
+    def __iter__(self):
+        raise NotImplementedError()
 
 
-class Integer(BaseGenerator):
+# --- Internal Implementations ---
+
+
+class _Integer(BaseGenerator):
     def __init__(self, low: int, high: int, rng: Optional[random.Random] = None):
         super().__init__(rng)
         self.low = low
@@ -40,7 +57,7 @@ class Integer(BaseGenerator):
         self._edges = [x for x in self._edges if low <= x <= high]
 
     def bind(self, rng: random.Random):
-        return Integer(self.low, self.high, rng=rng)
+        return _Integer(self.low, self.high, rng=rng)
 
     def __iter__(self):
         for x in self._edges:
@@ -52,11 +69,11 @@ class Integer(BaseGenerator):
         return smart_sample(
             self._edges,
             lambda: self._rng.randint(self.low, self.high),
-            self._rng
+            self._rng,
         )
 
 
-class Float(BaseGenerator):
+class _Float(BaseGenerator):
     def __init__(
         self,
         low: float = 0.0,
@@ -79,13 +96,7 @@ class Float(BaseGenerator):
             self._edges.append(float("nan"))
 
     def bind(self, rng: random.Random):
-        return Float(
-            self.low,
-            self.high,
-            self.allow_nan,
-            self.allow_inf,
-            rng=rng
-        )
+        return _Float(self.low, self.high, self.allow_nan, self.allow_inf, rng=rng)
 
     def __iter__(self):
         for x in self._edges:
@@ -97,13 +108,13 @@ class Float(BaseGenerator):
         return smart_sample(
             self._edges,
             lambda: self._rng.uniform(self.low, self.high),
-            self._rng
+            self._rng,
         )
 
 
-class Bool(BaseGenerator):
+class _Bool(BaseGenerator):
     def bind(self, rng: random.Random):
-        return Bool(rng=rng)
+        return _Bool(rng=rng)
 
     def __iter__(self):
         yield False
@@ -115,7 +126,7 @@ class Bool(BaseGenerator):
         return self._rng.choice([True, False])
 
 
-class String(BaseGenerator):
+class _String(BaseGenerator):
     def __init__(
         self,
         max_len: int = 20,
@@ -134,7 +145,7 @@ class String(BaseGenerator):
             self._edges.append(" " * max_len)
 
     def bind(self, rng: random.Random):
-        return String(self.max_len, self.chars, rng=rng)
+        return _String(self.max_len, self.chars, rng=rng)
 
     def __iter__(self):
         for x in self._edges:
@@ -149,10 +160,7 @@ class String(BaseGenerator):
         return "".join(self._rng.choice(self.chars) for _ in range(length))
 
 
-# --- Time Generators ---
-
-
-class Date(BaseGenerator):
+class _Date(BaseGenerator):
     def __init__(self, start: date, end: date, rng: Optional[random.Random] = None):
         super().__init__(rng)
         self.start = start
@@ -173,7 +181,7 @@ class Date(BaseGenerator):
                 continue
 
     def bind(self, rng: random.Random):
-        return Date(self.start, self.end, rng=rng)
+        return _Date(self.start, self.end, rng=rng)
 
     def __iter__(self):
         for x in self._edges:
@@ -184,13 +192,12 @@ class Date(BaseGenerator):
     def sample(self) -> date:
         return smart_sample(
             self._edges,
-            lambda: self.start
-            + timedelta(days=self._rng.randint(0, self.delta_days)),
-            self._rng
+            lambda: self.start + timedelta(days=self._rng.randint(0, self.delta_days)),
+            self._rng,
         )
 
 
-class DateTime(BaseGenerator):
+class _DateTime(BaseGenerator):
     def __init__(
         self, start: datetime, end: datetime, rng: Optional[random.Random] = None
     ):
@@ -204,7 +211,7 @@ class DateTime(BaseGenerator):
             self._edges.append(now)
 
     def bind(self, rng: random.Random):
-        return DateTime(self.start, self.end, rng=rng)
+        return _DateTime(self.start, self.end, rng=rng)
 
     def __iter__(self):
         for x in self._edges:
@@ -217,14 +224,11 @@ class DateTime(BaseGenerator):
             self._edges,
             lambda: self.start
             + timedelta(seconds=self._rng.randint(0, self.delta_seconds)),
-            self._rng
+            self._rng,
         )
 
 
-# --- Combinators ---
-
-
-class List(BaseGenerator):
+class _List(BaseGenerator):
     def __init__(
         self,
         element_gen: Any,
@@ -239,15 +243,13 @@ class List(BaseGenerator):
 
     def bind(self, rng: random.Random):
         new_elem = self.element_gen
-        # Check if it is an INSTANCE that needs binding
-        if not isinstance(new_elem, type) and hasattr(new_elem, "bind"):
+        if hasattr(new_elem, "bind"):
             new_elem = new_elem.bind(rng)
-        # If it is a CLASS, we can't bind it yet, but we pass the rng to List
-        return List(new_elem, self.min_len, self.max_len, rng=rng)
+        return _List(new_elem, self.min_len, self.max_len, rng=rng)
 
     def __iter__(self):
+        # Resolve generator
         if isinstance(self.element_gen, type):
-            # Try to pass RNG to constructor if supported
             try:
                 stream = iter(self.element_gen(rng=self.rng))
             except TypeError:
@@ -271,14 +273,14 @@ class List(BaseGenerator):
         length = self._rng.randint(self.min_len, self.max_len)
         result = []
 
-        # Instantiate/Resolve generator logic
+        # Instantiate
         if isinstance(self.element_gen, type):
-             try:
-                 gen_obj = self.element_gen(rng=self.rng)
-             except TypeError:
-                 gen_obj = self.element_gen()
+            try:
+                gen_obj = self.element_gen(rng=self.rng)
+            except TypeError:
+                gen_obj = self.element_gen()
         else:
-             gen_obj = self.element_gen
+            gen_obj = self.element_gen
 
         for _ in range(length):
             if hasattr(gen_obj, "sample"):
@@ -288,7 +290,7 @@ class List(BaseGenerator):
         return result
 
 
-class Dict(BaseGenerator):
+class _Dict(BaseGenerator):
     def __init__(self, rng: Optional[random.Random] = None, **field_generators):
         super().__init__(rng)
         self.field_gens = field_generators
@@ -296,11 +298,11 @@ class Dict(BaseGenerator):
     def bind(self, rng: random.Random):
         bound_fields = {}
         for k, v in self.field_gens.items():
-            if not isinstance(v, type) and hasattr(v, "bind"):
+            if hasattr(v, "bind"):
                 bound_fields[k] = v.bind(rng)
             else:
                 bound_fields[k] = v
-        return Dict(rng=rng, **bound_fields)
+        return _Dict(rng=rng, **bound_fields)
 
     def __iter__(self):
         streams = {}
@@ -337,22 +339,17 @@ class Dict(BaseGenerator):
         return result
 
 
-class Object(BaseGenerator):
+class _Object(BaseGenerator):
     def __init__(
-        self,
-        cls: Type,
-        rng: Optional[random.Random] = None,
-        **field_generators
+        self, cls: Type, rng: Optional[random.Random] = None, **field_generators
     ):
         super().__init__(rng)
         self.cls = cls
-        self.dict_gen = Dict(rng=rng, **field_generators)
+        self.dict_gen = _Dict(rng=rng, **field_generators)
 
     def bind(self, rng: random.Random):
-        # We need to recreate Object to keep the class reference
-        # but Dict.bind has done the heavy lifting for fields
         bound_dict = self.dict_gen.bind(rng)
-        return Object(self.cls, rng=rng, **bound_dict.field_gens)
+        return _Object(self.cls, rng=rng, **bound_dict.field_gens)
 
     def __iter__(self):
         for data in self.dict_gen:
@@ -363,7 +360,7 @@ class Object(BaseGenerator):
         return self.cls(**data)
 
 
-class Case(BaseGenerator):
+class _Case(BaseGenerator):
     def __init__(self, rng: Optional[random.Random] = None, **steps):
         super().__init__(rng)
         self.steps = steps
@@ -371,11 +368,11 @@ class Case(BaseGenerator):
     def bind(self, rng: random.Random):
         bound_steps = {}
         for k, v in self.steps.items():
-            if not isinstance(v, type) and hasattr(v, "bind"):
+            if hasattr(v, "bind"):
                 bound_steps[k] = v.bind(rng)
             else:
                 bound_steps[k] = v
-        return Case(rng=rng, **bound_steps)
+        return _Case(rng=rng, **bound_steps)
 
     def __iter__(self):
         keys = list(self.steps.keys())
@@ -388,7 +385,7 @@ class Case(BaseGenerator):
             except TypeError:
                 driver_def = driver_def()
         elif hasattr(driver_def, "bind") and self.rng:
-             driver_def = driver_def.bind(self.rng)
+            driver_def = driver_def.bind(self.rng)
 
         driver_stream = iter(driver_def)
 
@@ -404,7 +401,6 @@ class Case(BaseGenerator):
     def sample(self) -> SimpleNamespace:
         keys = list(self.steps.keys())
         result = {}
-
         driver_name = keys[0]
         driver_def = self.steps[driver_name]
 
@@ -414,7 +410,7 @@ class Case(BaseGenerator):
             except TypeError:
                 driver_def = driver_def()
         elif hasattr(driver_def, "bind") and self.rng:
-             driver_def = driver_def.bind(self.rng)
+            driver_def = driver_def.bind(self.rng)
 
         if hasattr(driver_def, "sample"):
             result[driver_name] = driver_def.sample()
@@ -450,3 +446,61 @@ class Case(BaseGenerator):
                 result_dict[name] = actual_gen.sample()
             else:
                 result_dict[name] = next(iter(actual_gen))
+
+
+# --- Public Factory Functions (Typed for Mypy) ---
+
+
+def Integer(low: int, high: int) -> int:
+    """Returns an integer generator. Mypy treats this as an int."""
+    return cast(int, _Integer(low, high))
+
+
+def Float(
+    low: float = 0.0,
+    high: float = 1.0,
+    allow_nan: bool = False,
+    allow_inf: bool = False,
+) -> float:
+    """Returns a float generator. Mypy treats this as a float."""
+    return cast(float, _Float(low, high, allow_nan, allow_inf))
+
+
+def Bool() -> bool:
+    """Returns a bool generator. Mypy treats this as a bool."""
+    return cast(bool, _Bool())
+
+
+def String(max_len: int = 20, chars: str = string.ascii_letters) -> str:
+    """Returns a string generator. Mypy treats this as a str."""
+    return cast(str, _String(max_len, chars))
+
+
+def Date(start: date, end: date) -> date:
+    """Returns a date generator. Mypy treats this as a date."""
+    return cast(date, _Date(start, end))
+
+
+def DateTime(start: datetime, end: datetime) -> datetime:
+    """Returns a datetime generator. Mypy treats this as a datetime."""
+    return cast(datetime, _DateTime(start, end))
+
+
+def List(element_gen: T | Any, min_len: int = 0, max_len: int = 10) -> PyList[T]:
+    """Returns a list generator. Mypy treats this as a List[T]."""
+    return cast(PyList[T], _List(element_gen, min_len, max_len))
+
+
+def Dict(**field_generators: Any) -> PyDict[str, Any]:
+    """Returns a dict generator. Mypy treats this as a Dict."""
+    return cast(PyDict[str, Any], _Dict(**field_generators))
+
+
+def Object(cls: Type[T], **field_generators: Any) -> T:
+    """Returns an object generator. Mypy treats this as an instance of T."""
+    return cast(T, _Object(cls, **field_generators))
+
+
+def Case(**steps: Any) -> SimpleNamespace:
+    """Returns a Case generator. Mypy treats this as a SimpleNamespace."""
+    return cast(SimpleNamespace, _Case(**steps))
