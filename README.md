@@ -1,5 +1,11 @@
 # Sixma
 
+![PyPI - Version](https://img.shields.io/pypi/v/sixma)
+![PyPi - Python Version](https://img.shields.io/pypi/pyversions/sixma)
+![Github - Open Issues](https://img.shields.io/github/issues-raw/apiad/sixma)
+![PyPi - Downloads (Monthly)](https://img.shields.io/pypi/dm/sixma)
+![Github - Commits](https://img.shields.io/github/commit-activity/m/apiad/sixma)
+
 **Probabilistic Correctness & Logical Falsification for Python.**
 
 > "Stop writing unit tests. Start certifying reliability."
