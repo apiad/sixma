@@ -76,12 +76,12 @@ $$
 N = \left\lceil \frac{\ln(1 - C)}{\ln(R)} \right\rceil
 $$
 
-| Reliability () | Confidence () | Trials Required () | Use Case |
-| --- | --- | --- | --- |
-| **0.90** | 0.95 | **29** | MVP / Quick Smoke Tests |
-| **0.99** | 0.99 | **459** | Standard Business Logic |
-| **0.999** | 0.99 | **4,603** | Core Algorithms |
-| **0.9999** | 0.999 | **69,075** | Critical Infrastructure |
+| Reliability | Confidence | Trials Required | Use Case                |
+| ----------- | ---------- | --------------- | ----------------------- |
+| 0.90        | 0.95       | 29              | MVP / Quick Smoke Tests |
+| 0.99        | 0.99       | 459             | Standard Business Logic |
+| 0.999       | 0.99       | 4,603           | Core Algorithms         |
+| 0.9999      | 0.999      | 69,075          | Critical Infrastructure |
 
 * **Reliability ():** The probability that the code will NOT fail on a random input.
 * **Confidence ():** The probability that our estimation of  is correct.
