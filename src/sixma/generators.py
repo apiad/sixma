@@ -36,7 +36,6 @@ class Integer(BaseGenerator):
         super().__init__(rng)
         self.low = low
         self.high = high
-        # Cache edge cases
         self._edges = {low, high, 0, 1, -1}
         self._edges = [x for x in self._edges if low <= x <= high]
 
@@ -44,10 +43,8 @@ class Integer(BaseGenerator):
         return Integer(self.low, self.high, rng=rng)
 
     def __iter__(self):
-        # 1. Yield all edge cases sequentially
         for x in self._edges:
             yield x
-        # 2. Infinite Random
         while True:
             yield self.sample()
 
@@ -162,12 +159,9 @@ class Date(BaseGenerator):
         self.end = end
         self.delta_days = (end - start).days
         self._edges = [start, end]
-
-        # Try to find 'today' and a leap day
         today = date.today()
         if start <= today <= end:
             self._edges.append(today)
-
         curr_year = start.year
         for y in range(curr_year, curr_year + 5):
             try:
@@ -205,7 +199,6 @@ class DateTime(BaseGenerator):
         self.end = end
         self.delta_seconds = int((end - start).total_seconds())
         self._edges = [start, end]
-
         now = datetime.now()
         if start <= now <= end:
             self._edges.append(now)
@@ -231,7 +224,7 @@ class DateTime(BaseGenerator):
 # --- Combinators ---
 
 
-class List(BaseGenerator):  # Removed [T] for runtime compatibility if needed
+class List(BaseGenerator):
     def __init__(
         self,
         element_gen: Any,
@@ -245,16 +238,20 @@ class List(BaseGenerator):  # Removed [T] for runtime compatibility if needed
         self.max_len = max_len
 
     def bind(self, rng: random.Random):
-        # Recursively bind the element generator if possible
         new_elem = self.element_gen
-        if hasattr(new_elem, "bind"):
+        # Check if it is an INSTANCE that needs binding
+        if not isinstance(new_elem, type) and hasattr(new_elem, "bind"):
             new_elem = new_elem.bind(rng)
+        # If it is a CLASS, we can't bind it yet, but we pass the rng to List
         return List(new_elem, self.min_len, self.max_len, rng=rng)
 
     def __iter__(self):
-        # Iteration Mode: Respect the element stream
         if isinstance(self.element_gen, type):
-            stream = iter(self.element_gen())
+            # Try to pass RNG to constructor if supported
+            try:
+                stream = iter(self.element_gen(rng=self.rng))
+            except TypeError:
+                stream = iter(self.element_gen())
         else:
             stream = iter(self.element_gen)
 
@@ -271,16 +268,17 @@ class List(BaseGenerator):  # Removed [T] for runtime compatibility if needed
                 return
 
     def sample(self) -> list:
-        # Sampling Mode: Random access
         length = self._rng.randint(self.min_len, self.max_len)
         result = []
 
         # Instantiate/Resolve generator logic
-        gen_obj = (
-            self.element_gen()
-            if isinstance(self.element_gen, type)
-            else self.element_gen
-        )
+        if isinstance(self.element_gen, type):
+             try:
+                 gen_obj = self.element_gen(rng=self.rng)
+             except TypeError:
+                 gen_obj = self.element_gen()
+        else:
+             gen_obj = self.element_gen
 
         for _ in range(length):
             if hasattr(gen_obj, "sample"):
@@ -296,21 +294,22 @@ class Dict(BaseGenerator):
         self.field_gens = field_generators
 
     def bind(self, rng: random.Random):
-        # Recursively bind fields
         bound_fields = {}
         for k, v in self.field_gens.items():
-            if hasattr(v, "bind"):
+            if not isinstance(v, type) and hasattr(v, "bind"):
                 bound_fields[k] = v.bind(rng)
             else:
                 bound_fields[k] = v
         return Dict(rng=rng, **bound_fields)
 
     def __iter__(self):
-        # Create streams for all fields
         streams = {}
         for k, gen in self.field_gens.items():
             if isinstance(gen, type):
-                streams[k] = iter(gen())
+                try:
+                    streams[k] = iter(gen(rng=self.rng))
+                except TypeError:
+                    streams[k] = iter(gen())
             else:
                 streams[k] = iter(gen)
 
@@ -323,7 +322,14 @@ class Dict(BaseGenerator):
     def sample(self) -> dict:
         result = {}
         for k, gen in self.field_gens.items():
-            gen_obj = gen() if isinstance(gen, type) else gen
+            if isinstance(gen, type):
+                try:
+                    gen_obj = gen(rng=self.rng)
+                except TypeError:
+                    gen_obj = gen()
+            else:
+                gen_obj = gen
+
             if hasattr(gen_obj, "sample"):
                 result[k] = gen_obj.sample()
             else:
@@ -340,13 +346,13 @@ class Object(BaseGenerator):
     ):
         super().__init__(rng)
         self.cls = cls
-        # Bind the internal dict generator
         self.dict_gen = Dict(rng=rng, **field_generators)
 
     def bind(self, rng: random.Random):
-        # We rely on Dict.bind to handle the fields, but we need to reconstruct Object
-        # Extract fields from the internal dict_gen
-        return Object(self.cls, rng=rng, **self.dict_gen.field_gens)
+        # We need to recreate Object to keep the class reference
+        # but Dict.bind has done the heavy lifting for fields
+        bound_dict = self.dict_gen.bind(rng)
+        return Object(self.cls, rng=rng, **bound_dict.field_gens)
 
     def __iter__(self):
         for data in self.dict_gen:
@@ -357,9 +363,6 @@ class Object(BaseGenerator):
         return self.cls(**data)
 
 
-# --- Conditional / Dependent Generator ---
-
-
 class Case(BaseGenerator):
     def __init__(self, rng: Optional[random.Random] = None, **steps):
         super().__init__(rng)
@@ -368,7 +371,7 @@ class Case(BaseGenerator):
     def bind(self, rng: random.Random):
         bound_steps = {}
         for k, v in self.steps.items():
-            if hasattr(v, "bind"):
+            if not isinstance(v, type) and hasattr(v, "bind"):
                 bound_steps[k] = v.bind(rng)
             else:
                 bound_steps[k] = v
@@ -380,41 +383,37 @@ class Case(BaseGenerator):
         driver_def = self.steps[driver_name]
 
         if isinstance(driver_def, type):
-            driver_def = driver_def()
-
-        # Ensure driver uses our RNG if possible/applicable
-        # Note: We assume it was bound during Case.bind(),
-        # but if it's a fresh class instance, we might need to bind it here.
-        if hasattr(driver_def, "bind") and self.rng:
+            try:
+                driver_def = driver_def(rng=self.rng)
+            except TypeError:
+                driver_def = driver_def()
+        elif hasattr(driver_def, "bind") and self.rng:
              driver_def = driver_def.bind(self.rng)
 
         driver_stream = iter(driver_def)
 
         while True:
             result = {}
-
-            # 1. Drive the primary stream
             try:
                 result[driver_name] = next(driver_stream)
             except StopIteration:
                 return
-
-            # 2. Resolve Dependents
             self._resolve_dependents(keys[1:], result)
-
             yield SimpleNamespace(**result)
 
     def sample(self) -> SimpleNamespace:
         keys = list(self.steps.keys())
         result = {}
 
-        # 1. Sample the driver
         driver_name = keys[0]
         driver_def = self.steps[driver_name]
-        if isinstance(driver_def, type):
-            driver_def = driver_def()
 
-        if hasattr(driver_def, "bind") and self.rng:
+        if isinstance(driver_def, type):
+            try:
+                driver_def = driver_def(rng=self.rng)
+            except TypeError:
+                driver_def = driver_def()
+        elif hasattr(driver_def, "bind") and self.rng:
              driver_def = driver_def.bind(self.rng)
 
         if hasattr(driver_def, "sample"):
@@ -422,16 +421,12 @@ class Case(BaseGenerator):
         else:
             result[driver_name] = next(iter(driver_def))
 
-        # 2. Resolve Dependents
         self._resolve_dependents(keys[1:], result)
-
         return SimpleNamespace(**result)
 
     def _resolve_dependents(self, dependent_keys, result_dict):
         for name in dependent_keys:
             step_def = self.steps[name]
-
-            # Check for dynamic dependency (callable lambda)
             if (
                 callable(step_def)
                 and not isinstance(step_def, type)
@@ -444,10 +439,11 @@ class Case(BaseGenerator):
                 actual_gen = step_def
 
             if isinstance(actual_gen, type):
-                actual_gen = actual_gen()
-
-            # Crucial: Bind the dynamically created generator to our RNG
-            if hasattr(actual_gen, "bind") and self.rng:
+                try:
+                    actual_gen = actual_gen(rng=self.rng)
+                except TypeError:
+                    actual_gen = actual_gen()
+            elif hasattr(actual_gen, "bind") and self.rng:
                 actual_gen = actual_gen.bind(self.rng)
 
             if hasattr(actual_gen, "sample"):
