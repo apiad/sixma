@@ -8,6 +8,11 @@ authors = [
 ]
 requires-python = ">=3.12"
 dependencies = []
+classifiers = [
+    "Programming Language :: Python :: 3.12",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+]
 
 [build-system]
 requires = ["hatchling"]
