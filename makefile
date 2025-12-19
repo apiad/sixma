@@ -65,7 +65,7 @@ release: format-check
 	@sed -i.bak "s/version = \"$(CURRENT_VERSION)\"/version = \"$(NEW_VERSION)\"/" pyproject.toml
 
 	@echo Replace version in sixma/__init__.py
-	@sed -i.bak "s/__version__ = \"$(CURRENT_VERSION)\"/__version__ = \"$(NEW_VERSION)\"/" sixma/__init__.py
+	@sed -i.bak "s/__version__ = \"$(CURRENT_VERSION)\"/__version__ = \"$(NEW_VERSION)\"/" src/sixma/__init__.py
 
 	@echo Remove backup files
 	@rm pyproject.toml.bak src/sixma/__init__.py.bak
@@ -73,7 +73,7 @@ release: format-check
 	@uv sync --all-extras
 
 	@echo "Committing version bump..."
-	@git add pyproject.toml sixma/__init__.py uv.lock
+	@git add pyproject.toml src/sixma/__init__.py uv.lock
 	@git commit -m "Bump version to $(NEW_VERSION)"
 
 	@echo "Tagging new version..."
