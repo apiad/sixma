@@ -51,22 +51,3 @@ def test_iso_format_roundtrip(dt: LogWindow):
     # Note: fromisoformat might lose precision if microsecond logic varies,
     # so we often test equality.
     assert parsed_dt == dt
-
-
-# --- 3. A "Buggy" Test to Demonstrate Seeding ---
-
-
-# Let's pretend we have a bug that crashes specifically on weekends.
-@certify(reliability=0.999, confidence=0.95)
-def test_weekend_processing_bug(d: DateRange):
-    """
-    This test simulates a bug that only happens on Saturdays.
-    """
-    # 5 = Saturday, 6 = Sunday
-    if d.weekday() == 5:
-        # Simulate a crash or logic error
-        # In a real scenario, this might be an "Off by one" error in business day calculation
-        assert 1 == 1  # Change to 1 == 0 to see it fail!
-
-    # Logic for weekdays
-    assert d.weekday() < 7
