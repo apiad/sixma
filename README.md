@@ -72,6 +72,10 @@ Standard property-based testing runs an arbitrary number of tests (e.g., 100). S
 
 The number of trials  is calculated dynamically using the Zero-Failure Testing formula:
 
+$$
+N = \left\lceil \frac{\ln(1 - C)}{\ln(R)} \right\rceil
+$$
+
 | Reliability () | Confidence () | Trials Required () | Use Case |
 | --- | --- | --- | --- |
 | **0.90** | 0.95 | **29** | MVP / Quick Smoke Tests |
