@@ -1,6 +1,3 @@
-Here is the completely updated `README.md`. I have restructured the **Quick Start** section to explicitly compare the three syntax styles, clearly labeling them as **Recommended (Production)**, **Strict (Annotated)**, and **Prototyping (Shortcut)**.
-
-```markdown
 # Sixma
 
 ![PyPI - Version](https://img.shields.io/pypi/v/sixma)
