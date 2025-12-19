@@ -5,27 +5,16 @@ import os
 import random
 from typing import get_type_hints, Annotated, get_args, get_origin
 
-
+# ... (PreconditionError, CertificationError, require remain unchanged) ...
 class PreconditionError(Exception):
-    """Raised when a sample is invalid (skip this trial)."""
-
     pass
-
 
 class CertificationError(Exception):
-    """Raised when reliability criteria cannot be met (too many skips)."""
-
     pass
 
-
 def require(condition: bool):
-    """
-    Asserts a precondition.
-    If False, aborts the current trial and samples new inputs.
-    """
     if not condition:
         raise PreconditionError()
-
 
 def certify(reliability: float = 0.999, confidence: float = 0.95, max_discards: int = 10000):
     if reliability >= 1.0 or reliability <= 0.0:
@@ -38,39 +27,47 @@ def certify(reliability: float = 0.999, confidence: float = 0.95, max_discards: 
         generator_blueprints = {}
         sixma_param_names = set()
 
-        # STRATEGY 1: standard get_type_hints (Works for global functions)
+        # 1. Resolve Hints (Fallback to __annotations__ for local scope/lambdas)
         try:
             hints = get_type_hints(test_func, include_extras=True)
         except Exception:
-            # Fallback for local functions where get_type_hints might fail
             hints = test_func.__annotations__
 
-        # STRATEGY 2: Merge raw annotations if get_type_hints missed some
-        # (Crucial for local functions like spy_test)
+        # Merge in case get_type_hints missed locals
         combined_hints = {**test_func.__annotations__, **hints}
 
         for name, type_hint in combined_hints.items():
-            # Check 1: Is it Annotated? (Using get_origin is safer)
+            blueprint = None
+
+            # Strategy A: Annotated[T, Generator] (Formal)
             if get_origin(type_hint) is Annotated:
                 args = get_args(type_hint)
-                # Check 2: Is the second arg a Generator?
                 if len(args) > 1:
-                    gen_obj = args[1]
-                    if hasattr(gen_obj, '__iter__') or isinstance(gen_obj, type):
-                        generator_blueprints[name] = gen_obj
-                        sixma_param_names.add(name)
+                    candidate = args[1]
+                    # Check if it's a class or an instance with __iter__
+                    if hasattr(candidate, '__iter__') or isinstance(candidate, type):
+                        blueprint = candidate
+
+            # Strategy B: Direct Generator Instance (Shortcut)
+            # e.g. def test(x: gen.Integer(0, 10))
+            # We check if the hint ITSELF is iterable (and not a class like 'str' or 'list')
+            elif hasattr(type_hint, '__iter__') and not isinstance(type_hint, type):
+                 blueprint = type_hint
+
+            # Register if valid
+            if blueprint:
+                generator_blueprints[name] = blueprint
+                sixma_param_names.add(name)
 
         @functools.wraps(test_func)
         def wrapper(**fixture_kwargs):
+            # ... (Seeding logic from previous step) ...
             env_seed = os.environ.get("SIXMA_SEED")
             if env_seed:
                 current_seed = int(env_seed)
                 print(f"[Sixma] Reproducing with Seed: {current_seed}")
             else:
-                # Generate a random 32-bit seed
                 current_seed = random.getrandbits(32)
-
-            # Apply the seed globally for this test execution
             random.seed(current_seed)
 
             successes = 0
@@ -78,11 +75,14 @@ def certify(reliability: float = 0.999, confidence: float = 0.95, max_discards: 
 
             # Setup Iterators
             active_streams = {}
-            for name, blueprint in generator_blueprints.items():
-                if isinstance(blueprint, type):
-                    active_streams[name] = iter(blueprint())
+            for name, bp in generator_blueprints.items():
+                if isinstance(bp, type):
+                    try:
+                        active_streams[name] = iter(bp())
+                    except TypeError:
+                         raise TypeError(f"Generator class '{bp.__name__}' needs arguments. Instantiate it in the signature.")
                 else:
-                    active_streams[name] = iter(blueprint)
+                    active_streams[name] = iter(bp)
 
             print(f"\n[Sixma] Target: {required_successes} successes (R={reliability}, C={confidence})")
 
@@ -90,15 +90,15 @@ def certify(reliability: float = 0.999, confidence: float = 0.95, max_discards: 
                 if discards > max_discards:
                     raise CertificationError(f"Discarded {discards} inputs.")
 
-                # Generate Inputs
+                # Generate
                 generated_kwargs = {}
-                try:
-                    for name, stream in active_streams.items():
+                for name, stream in active_streams.items():
+                    try:
                         generated_kwargs[name] = next(stream)
-                except StopIteration:
-                     raise RuntimeError(f"Generator for '{name}' exhausted.")
+                    except StopIteration:
+                        raise RuntimeError(f"Generator for '{name}' exhausted.")
 
-                # Merge & Execute
+                # Merge
                 final_kwargs = {**fixture_kwargs, **generated_kwargs}
 
                 try:
