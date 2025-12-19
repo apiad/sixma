@@ -210,16 +210,16 @@ Used for **Preconditions**.
 
 * **Primitives:** `Integer`, `Float`, `Bool`, `String`
 * **Combinators:**
-* `List(gen, min_len, max_len)`
-* `Dict(key=gen, ...)`
-* `Object(Cls, field=gen, ...)`
+  * `List(gen, min_len, max_len)`
+  * `Dict(key=gen, ...)`
+  * `Object(Cls, field=gen, ...)`
 
 * **Logic:**
-* `Case(field=gen, dependent_field=lambda prev: gen)`
+  * `Case(field=gen, dependent_field=lambda prev: gen)`
 
 * **Temporal:**
-* `Date(start, end)`
-* `DateTime(start, end)`
+  * `Date(start, end)`
+  * `DateTime(start, end)`
 
 
 ## 📄 License
