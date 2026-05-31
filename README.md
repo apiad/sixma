@@ -83,6 +83,70 @@ def test_math(
     assert x + y == y + x
 
 ```
+
+### 4. The Pick-Based Way (Stateful & Coupled) 🎲
+
+For tests where inputs are coupled to control flow — state machines, op
+sequences, anything where "the next value depends on what we just did" —
+declare a `ctx` parameter. The framework injects a `PickContext` the body
+pulls values from on demand.
+
+```python
+from sixma import certify
+
+@certify(reliability=0.999, confidence=0.95, max_picks_per_trial=100)
+def test_stack_lifo(ctx):
+    stack, reference = [], []
+    while ctx.pick("op", "stop") == "op":
+        if ctx.pick("push", "pop") == "push":
+            x = ctx.range(0, 100)
+            stack.append(x)
+            reference.append(x)
+        else:
+            if not reference:
+                ctx.discard()
+            assert stack.pop() == reference.pop()
+
+```
+
+* `ctx.pick(*options, label=None)` — uniformly random choice from the options.
+* `ctx.range(low, high, label=None)` — integer in `[low, high]` inclusive.
+* `ctx.discard()` — equivalent to `require(False)`; the trial doesn't count
+  toward `N` or the failure tally.
+
+**Semantic shift.** Under picks, `reliability` characterizes the fraction
+of the *test body's induced path distribution* that passes — not an
+external input space. Bugs hiding behind unlikely pick sequences are
+exponentially under-sampled by uniform sampling; restructure the body or
+use `ctx.discard()` to bias the distribution toward interesting paths.
+
+**Mixing.** A body may declare both default-value generators and `ctx`:
+
+```python
+@certify
+def test_mixed(x: int = g.Integer(0, 100), ctx=None):
+    while ctx.pick(True, False):
+        x += ctx.range(-10, 10)
+    assert -10000 < x < 10000
+
+```
+
+Failure traces show the ordered list of picks plus the seed for
+reproduction:
+
+```text
+❌ Falsified at trial 412!
+   Seed: 84920174 (Set SIXMA_SEED=84920174 to reproduce)
+   Trace:
+     loop = 'op'
+     action = 'push'
+     value = 42
+     loop = 'op'
+     action = 'pop'
+   Error: AssertionError
+
+```
+
 ## 🧠 The Philosophy
 
 Standard property-based testing runs an arbitrary number of tests (e.g., 100). Sixma inverts this: **You tell the framework how confident you want to be.**
@@ -193,13 +257,16 @@ When a test fails on a complex input (e.g., a list of 50 items), Sixma automatic
 ```
 ## 📚 API Reference
 
-### `@certify(reliability, confidence, max_discards)`
+### `@certify(reliability, confidence, max_discards, max_picks_per_trial)`
 
 The main decorator.
 
 * `reliability`: Target probability of success (0.0 - 1.0).
 * `confidence`: Statistical significance level (0.0 - 1.0).
-* `max_discards`: Safety valve for infinite loops in `require()`.
+* `max_discards`: Safety valve — caps the number of discarded trials
+  (`require()` failures and `ctx.discard()` calls combined).
+* `max_picks_per_trial`: Safety valve for divergent test bodies that loop
+  on `ctx.pick(...)`. Default `1000`. Exceeding it discards the trial.
 
 ### Generators (`sixma.generators`)
 
