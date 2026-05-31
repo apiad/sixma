@@ -51,39 +51,38 @@ issues:
 CURRENT_VERSION := $(shell grep 'version = ' pyproject.toml | cut -d '"' -f 2)
 
 .PHONY: release
+# Procedure documented in know-how/releasing.md (source of truth).
+# This target is a thin helper that follows it.
 release: format-check
-	@echo "Current version: ${CURRENT_VERSION}"
 	@if [ -z "$(NEW_VERSION)" ]; then \
 		echo "ERROR: NEW_VERSION environment variable is not set."; \
 		echo "Usage: NEW_VERSION=x.y.z make release"; \
 		exit 1; \
 	fi
+	@[ "$$(git rev-parse --abbrev-ref HEAD)" = "main" ] || { echo "ERROR: not on main"; exit 1; }
+	@git diff --quiet --exit-code || { echo "ERROR: dirty tree, commit or stash first"; exit 1; }
+	@git diff --quiet --cached --exit-code || { echo "ERROR: staged changes present"; exit 1; }
+	@echo "Current version: ${CURRENT_VERSION} → $(NEW_VERSION)"
 	@make test-all
-	@echo "Bumping version from $(CURRENT_VERSION) to $(NEW_VERSION)..."
 
-	@echo Replace version in pyproject.toml
+	@echo "Bumping pyproject.toml..."
 	@sed -i.bak "s/version = \"$(CURRENT_VERSION)\"/version = \"$(NEW_VERSION)\"/" pyproject.toml
-
-	@echo Replace version in sixma/__init__.py
-	@sed -i.bak "s/__version__ = \"$(CURRENT_VERSION)\"/__version__ = \"$(NEW_VERSION)\"/" src/sixma/__init__.py
-
-	@echo Remove backup files
-	@rm pyproject.toml.bak src/sixma/__init__.py.bak
+	@rm pyproject.toml.bak
 
 	@uv sync --all-extras
 
 	@echo "Committing version bump..."
-	@git add pyproject.toml src/sixma/__init__.py uv.lock
-	@git commit -m "Bump version to $(NEW_VERSION)"
+	@git add pyproject.toml uv.lock
+	@git commit -m "chore(release): v$(NEW_VERSION)"
 
 	@echo "Tagging new version..."
-	@git tag "v$(NEW_VERSION)"
+	@git tag -a "v$(NEW_VERSION)" -m "Release v$(NEW_VERSION)"
 
-	@echo "Pushing commit and tags..."
-	@git push
-	@git push --tags
+	@echo "Pushing commit and tag..."
+	@git push origin main
+	@git push origin "v$(NEW_VERSION)"
 
-	@echo "Creating Github release..."
-	@gh release create "v$(NEW_VERSION)" --title "v$(NEW_VERSION)" --notes "Release version $(NEW_VERSION)"
+	@echo "Creating GitHub release..."
+	@gh release create "v$(NEW_VERSION)" --title "v$(NEW_VERSION)" --generate-notes
 
-	@echo "✅ Version $(NEW_VERSION) successfully released."
+	@echo "✅ v$(NEW_VERSION) released. PyPI publish runs via release.yaml workflow."
