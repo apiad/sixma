@@ -1,6 +1,6 @@
 ---
 date: 2026-05-31
-status: design
+status: implemented (v0.5.0, 32f59c9) — v1 scope shipped; §5 axes still deferred
 author: Alex Piad (with Claude Opus 4.7)
 scope: sixma v0.5 — pick-based test bodies; full vision captured for later iterations
 ---

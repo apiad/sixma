@@ -1,5 +1,9 @@
 # Sixma v1 (pick-based test bodies) Implementation Plan
 
+**Status: complete — shipped as v0.5.0 (`32f59c9`, 2026-05-31).** All 5 tasks,
+8/8 acceptance criteria, 37 tests passing, published to PyPI and tagged on
+GitHub. Deferred axes live in §5 of the design doc.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Add a `ctx` parameter to `@certify` that lets test bodies pull random values mid-execution via `ctx.pick(...)`, `ctx.range(...)`, and `ctx.discard()`, certifying invariants over the body's induced path distribution under uniform sampling.
@@ -38,7 +42,7 @@ Done after writing. Key symbol-existence checks:
 - Modify: `src/sixma/core.py` (add new classes before the `certify` function)
 - Test: `tests/test_picks.py` (create)
 
-- [ ] **Step 1: Write the failing unit tests for PickContext primitives**
+- [x] **Step 1: Write the failing unit tests for PickContext primitives**
 
 Create `tests/test_picks.py` with:
 
@@ -110,12 +114,12 @@ def test_pick_counter_increments_per_call():
     assert trial.pick_count == 2
 ```
 
-- [ ] **Step 2: Run tests; verify they fail**
+- [x] **Step 2: Run tests; verify they fail**
 
 Run: `uv run pytest tests/test_picks.py -v`
 Expected: ImportError / AttributeError on `PickContext`, `Trial`, `UniformSampler`, `_Discard`.
 
-- [ ] **Step 3: Add the primitive classes to `src/sixma/core.py`**
+- [x] **Step 3: Add the primitive classes to `src/sixma/core.py`**
 
 Insert these definitions immediately after the `CertificationError` class (around line 24) and before `require`:
 
@@ -191,17 +195,17 @@ class PickContext:
         raise _Discard()
 ```
 
-- [ ] **Step 4: Run tests; verify they pass**
+- [x] **Step 4: Run tests; verify they pass**
 
 Run: `uv run pytest tests/test_picks.py -v`
 Expected: 6 passed.
 
-- [ ] **Step 5: Run full suite + ruff**
+- [x] **Step 5: Run full suite + ruff**
 
 Run: `uv run ruff check . && uv run pytest -q`
 Expected: 0 lint errors, all tests pass (23 existing + 6 new = 29).
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add src/sixma/core.py tests/test_picks.py
@@ -217,7 +221,7 @@ git commit -m "feat(core): PickContext + Sampler seam for pick-based test bodies
 - Modify: `src/sixma/__init__.py` — export `PickContext`
 - Test: `tests/test_picks.py` — integration tests
 
-- [ ] **Step 1: Add integration tests at the end of `tests/test_picks.py`**
+- [x] **Step 1: Add integration tests at the end of `tests/test_picks.py`**
 
 Append:
 
@@ -262,12 +266,12 @@ def test_discard_via_ctx_counts_as_precondition():
     half_discarded()  # type: ignore
 ```
 
-- [ ] **Step 2: Run tests; verify they fail**
+- [x] **Step 2: Run tests; verify they fail**
 
 Run: `uv run pytest tests/test_picks.py::test_pick_only_test_certifies_trivial_invariant -v`
 Expected: TypeError or similar — the decorator doesn't yet know what to do with `ctx`.
 
-- [ ] **Step 3: Modify the `certify` decorator signature in `src/sixma/core.py`**
+- [x] **Step 3: Modify the `certify` decorator signature in `src/sixma/core.py`**
 
 Replace the current signature:
 
@@ -288,7 +292,7 @@ def certify(
 ):
 ```
 
-- [ ] **Step 4: Modify parameter-discovery block in the decorator**
+- [x] **Step 4: Modify parameter-discovery block in the decorator**
 
 Right after the existing Strategy 1 + Strategy 2 blocks (around line 78), add Strategy 3 — detect at most one `ctx`-style parameter:
 
@@ -317,7 +321,7 @@ for name, param in sig.parameters.items():
         sixma_param_names.add(name)
 ```
 
-- [ ] **Step 5: Modify the trial loop to build & inject `PickContext`**
+- [x] **Step 5: Modify the trial loop to build & inject `PickContext`**
 
 Replace the trial loop body (roughly lines 116-160) with the version below. The behavioral diff: build a fresh `Trial` + `PickContext` per trial when `ctx_param_name` is set; catch `_Discard` and `_TrialTooDeep` as discards; emit a `Trace:` failure message for ctx-using trials.
 
@@ -409,7 +413,7 @@ while successes < required_successes:
 
 Note the `{k: v for k, v in ... if k != ctx_param_name}` filter — in the mixed path the `ctx` should never appear in `Inputs:`, but we never enter this branch when `ctx_param_name is not None` anyway. The expression is safe with `ctx_param_name=None` because the dict comp short-circuits.
 
-- [ ] **Step 6: Re-export `PickContext` from `src/sixma/__init__.py`**
+- [x] **Step 6: Re-export `PickContext` from `src/sixma/__init__.py`**
 
 Update the file to:
 
@@ -427,17 +431,17 @@ except PackageNotFoundError:
 __all__ = ["certify", "require", "PickContext"]
 ```
 
-- [ ] **Step 7: Run targeted tests; verify they pass**
+- [x] **Step 7: Run targeted tests; verify they pass**
 
 Run: `uv run pytest tests/test_picks.py -v`
 Expected: 10 passed.
 
-- [ ] **Step 8: Run full suite + ruff**
+- [x] **Step 8: Run full suite + ruff**
 
 Run: `uv run ruff check . && uv run pytest -q`
 Expected: 0 lint errors, 33 tests pass (23 existing + 10 new).
 
-- [ ] **Step 9: Commit**
+- [x] **Step 9: Commit**
 
 ```bash
 git add src/sixma/core.py src/sixma/__init__.py tests/test_picks.py
@@ -451,7 +455,7 @@ git commit -m "feat(core): wire ctx parameter into certify with max_picks_per_tr
 **Files:**
 - Modify: `tests/test_picks.py` — add Stack test + safety-valve tests
 
-- [ ] **Step 1: Add the Stack vertical-slice test + safety-valve tests**
+- [x] **Step 1: Add the Stack vertical-slice test + safety-valve tests**
 
 Append to `tests/test_picks.py`:
 
@@ -569,17 +573,17 @@ def test_max_picks_exhaustion_then_certification_error():
     assert "Discarded" in str(excinfo.value)
 ```
 
-- [ ] **Step 2: Run tests; verify they pass**
+- [x] **Step 2: Run tests; verify they pass**
 
 Run: `uv run pytest tests/test_picks.py -v`
 Expected: 14 passed.
 
-- [ ] **Step 3: Run full suite + ruff**
+- [x] **Step 3: Run full suite + ruff**
 
 Run: `uv run ruff check . && uv run pytest -q`
 Expected: 0 lint errors, 37 tests pass.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add tests/test_picks.py
@@ -593,7 +597,7 @@ git commit -m "test(picks): vertical-slice Stack/LIFO + safety-valve acceptance 
 **Files:**
 - Modify: `README.md` — add "4. The Pick-Based Way" + document `max_picks_per_trial`
 
-- [ ] **Step 1: Insert a "4. The Pick-Based Way" section after section "3. The Strict Way"**
+- [x] **Step 1: Insert a "4. The Pick-Based Way" section after section "3. The Strict Way"**
 
 Find the line at the end of section 3 (just before `## 🧠 The Philosophy`) and insert:
 
@@ -650,7 +654,7 @@ Failure traces show the ordered list of picks plus the seed for reproduction:
 
 (Note: in the actual file, the ` ``` ` block above is inline markdown — preserve the nested code fences using the existing four-space indent convention if needed.)
 
-- [ ] **Step 2: Update the API Reference section**
+- [x] **Step 2: Update the API Reference section**
 
 Find:
 
@@ -677,11 +681,11 @@ The main decorator.
 * `max_picks_per_trial`: Safety valve for divergent test bodies that loop on `ctx.pick(...)`. Default 1000. Exceeding this discards the trial.
 ```
 
-- [ ] **Step 3: Visually verify rendering**
+- [x] **Step 3: Visually verify rendering**
 
 Run: `head -200 README.md` and confirm the new section reads cleanly.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add README.md
@@ -695,7 +699,7 @@ git push origin main
 
 Follow `know-how/releasing.md` step-by-step. Summary below — refer to the know-how for the canonical procedure.
 
-- [ ] **Step 1: Preconditions**
+- [x] **Step 1: Preconditions**
 
 ```bash
 cd /home/apiad/Workspace/repos/sixma
@@ -704,7 +708,7 @@ git status --porcelain                # empty
 git fetch origin && git status -sb    # not behind
 ```
 
-- [ ] **Step 2: Pre-release checks**
+- [x] **Step 2: Pre-release checks**
 
 ```bash
 uv run ruff check . && uv run pytest --cov=sixma
@@ -712,7 +716,7 @@ uv run ruff check . && uv run pytest --cov=sixma
 
 Both must pass.
 
-- [ ] **Step 3: Bump version**
+- [x] **Step 3: Bump version**
 
 Either `NEW_VERSION=0.5.0 make release` (makefile path) **or** the explicit sequence:
 
@@ -723,7 +727,7 @@ grep '^version' pyproject.toml                                    # 0.5.0
 uv run python -c "import sixma; print(sixma.__version__)"         # 0.5.0
 ```
 
-- [ ] **Step 4: Commit + tag + push**
+- [x] **Step 4: Commit + tag + push**
 
 ```bash
 git add pyproject.toml uv.lock
@@ -733,13 +737,13 @@ git push origin main
 git push origin v0.5.0
 ```
 
-- [ ] **Step 5: Create GitHub Release**
+- [x] **Step 5: Create GitHub Release**
 
 ```bash
 gh release create v0.5.0 --generate-notes --title v0.5.0
 ```
 
-- [ ] **Step 6: Wait for `release.yaml` workflow + verify PyPI**
+- [x] **Step 6: Wait for `release.yaml` workflow + verify PyPI**
 
 ```bash
 gh run watch
@@ -747,7 +751,7 @@ gh release view v0.5.0 --json url --jq '.url'
 # Then check https://pypi.org/project/sixma/0.5.0/ within ~5min
 ```
 
-- [ ] **Step 7: Smoke test from PyPI**
+- [x] **Step 7: Smoke test from PyPI**
 
 ```bash
 cd /tmp && uv init sixma-smoke && cd sixma-smoke
