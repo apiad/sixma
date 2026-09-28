@@ -64,8 +64,7 @@ Python 3.13 and install uv inline.
   is acceptable at the call site since mypy doesn't understand the rewrite.
 - **Python 3.12+** per `pyproject.toml` (CI runs 3.13). `uv` is the package
   manager; do not use `pip` directly.
-- **Commit straight to main** (per workspace convention for solo repos —
-  feature-branch+PR only when explicitly requested). Conventional commits.
+- Conventional commits.
 
 ## Know-how
 
